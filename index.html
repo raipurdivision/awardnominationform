@@ -5,6 +5,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -466,20 +467,19 @@
                 </div>
             </div>
 
+            <div id="message" class="message"></div>
+
             <div class="button-container">
                 <button type="submit" class="btn-submit">Submit</button>
                 <button type="reset" class="btn-reset">Reset</button>
                 <button type="button" class="btn-pdf" onclick="generatePDF()">Generate PDF</button>
             </div>
-
-            <div id="message" class="message"></div>
         </form>
     </div>
 
     <script>
-        // Google Sheets Configuration
-        // IMPORTANT: Replace this URL with your Google Apps Script Web App URL
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzuGl8tYiim_ZXBMyJ5l0r-ubQ5V00F1F4r0kGbP9X-8nz27WdV5kvZkzTqFKOAlHDO/exec';
+        // Google Sheets Configuration — Raipur Division Award Nomination
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx7WDM2HP5ukVhVtQCS2fwdJ2BvKnv9xszb8gMMK273j90Njwb5_nmtfgikZSdGYReciw/exec';
 
         // Auto-populate year field with current year
         document.getElementById('year').value = new Date().getFullYear();
@@ -519,7 +519,7 @@
 
             // Check if already submitted
             if (hasSubmitted) {
-                showMessage('Form already submitted! Please reset the form to submit a new nomination.', 'error');
+                showMessage('⚠️ Data Already Submitted! Please reset the form to submit a new nomination.', 'error');
                 return;
             }
 
@@ -537,29 +537,45 @@
             submitBtn.disabled = true;
             submitBtn.textContent = 'Submitting...';
 
-            const formData = {
-                month: document.getElementById('month').value,
-                year: document.getElementById('year').value,
-                employeeName: document.getElementById('employeeName').value,
-                designation: document.getElementById('designation').value,
-                pf: document.getElementById('pf').value,
-                department: document.getElementById('department').value,
-                section: document.getElementById('section').value,
-                duration: document.getElementById('duration').value,
-                contribution: document.getElementById('contribution').value,
-                nominatedBy: document.getElementById('nominatedby').value,
-                submittedAt: new Date().toLocaleString()
-            };
+            // Collect all form fields
+            const month   = document.getElementById('month').value;
+            const year    = document.getElementById('year').value;
+            const empName = document.getElementById('employeeName').value;
+            const desig   = document.getElementById('designation').value;
+            const pfNo    = document.getElementById('pf').value;
+            const dept    = document.getElementById('department').value;
+            const sec     = document.getElementById('section').value;
+            const dur     = document.getElementById('duration').value;
+            const contrib = document.getElementById('contribution').value;
+            const nominBy = document.getElementById('nominatedby').value;
+
+            // Map to Award Nomination sheet columns:
+            // Timestamp | CLI Name & HQ-1 | CLI Name-2 & HQ | Date | LP Name | Remarks | Other Remarks
+            // cliName1   → Nominated By (name of nominator)
+            // cliName2   → Department / Section
+            // date       → Month + Year
+            // lpName     → Employee Name | Designation | PF Number
+            // remarks    → Contribution / Basis of Recommendation
+            // otherRemarks → Duration of Service
+            const params = new URLSearchParams({
+                sheet:        'Award Nomination',
+                cliName1:     nominBy,
+                cliName2:     dept + ' / ' + sec,
+                date:         month + ' (' + year + ')',
+                lpName:       empName + ' | ' + desig + ' | PF: ' + pfNo,
+                remarks:      contrib,
+                otherRemarks: 'Duration of Service: ' + dur
+            });
 
             try {
-                // Send to Google Sheets
+                // Send as form-urlencoded so Apps Script reads via e.parameter
                 const response = await fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
                     mode: 'no-cors',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: JSON.stringify(formData)
+                    body: params.toString()
                 });
 
                 // Mark as submitted
@@ -617,6 +633,12 @@
 
         // Generate PDF function
         function generatePDF() {
+            // Block PDF if form has not been submitted yet
+            if (!hasSubmitted) {
+                showMessage('⚠️ First Submit Data before generating PDF!', 'error');
+                return;
+            }
+
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
 
