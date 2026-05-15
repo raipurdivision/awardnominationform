@@ -8,6 +8,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -353,6 +354,78 @@
             box-shadow: none;
         }
 
+        /* Auto-save indicator */
+        .autosave-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #e8f5e9;
+            border: 1.5px solid #a5d6a7;
+            border-radius: 8px;
+            padding: 7px 16px;
+            margin-bottom: 18px;
+            font-size: 13px;
+            color: #2e7d32;
+            font-weight: 500;
+        }
+
+        .autosave-status {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .autosave-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #66bb6a;
+            display: inline-block;
+            transition: background 0.3s;
+        }
+
+        .autosave-dot.saving {
+            background: #ffa726;
+            animation: pulse 0.8s infinite alternate;
+        }
+
+        @keyframes pulse {
+            from { opacity: 1; }
+            to   { opacity: 0.3; }
+        }
+
+        .btn-clear-draft {
+            background: none;
+            border: 1.5px solid #e53935;
+            color: #e53935;
+            border-radius: 6px;
+            padding: 4px 13px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            min-width: unset;
+            transition: all 0.2s ease;
+        }
+
+        .btn-clear-draft:hover {
+            background: #ffebee;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .draft-restored-badge {
+            background: #fff3e0;
+            border: 1.5px solid #ffb74d;
+            color: #e65100;
+            border-radius: 8px;
+            padding: 7px 16px;
+            margin-bottom: 14px;
+            font-size: 13px;
+            font-weight: 600;
+            display: none;
+            text-align: center;
+        }
+
         @media (max-width: 768px) {
             .form-row {
                 flex-direction: column;
@@ -392,6 +465,20 @@
     <div class="container">
         <h1>Nomination Form Under Monthly Award Scheme</h1>
         <h2>For Safety/Outstanding Performance</h2>
+
+        <!-- Draft restored notice -->
+        <div class="draft-restored-badge" id="draftRestoredBadge">
+            📋 Draft restored — your previously typed data has been loaded automatically.
+        </div>
+
+        <!-- Auto-save bar -->
+        <div class="autosave-bar">
+            <div class="autosave-status">
+                <span class="autosave-dot" id="autosaveDot"></span>
+                <span id="autosaveLabel">Auto-save on</span>
+            </div>
+            <button type="button" class="btn-clear-draft" onclick="clearDraft()">🗑 Clear Draft</button>
+        </div>
 
         <form id="nominationForm">
             <div class="form-row">
@@ -589,6 +676,8 @@
 
                 // Mark as submitted
                 hasSubmitted = true;
+                localStorage.removeItem(DRAFT_KEY); // draft no longer needed
+                document.getElementById('autosaveLabel').textContent = 'Submitted — draft cleared';
                 showMessage('Form submitted successfully! Use Reset button to submit a new nomination.', 'success');
 
                 // Keep the button disabled after successful submission
@@ -623,6 +712,8 @@
 
             // Hide any messages
             document.getElementById('message').style.display = 'none';
+            document.getElementById('autosaveLabel').textContent = 'Auto-save on';
+            document.getElementById('autosaveDot').classList.remove('saving');
 
             // Clear signature
             clearSignature();
@@ -639,6 +730,85 @@
                 messageDiv.style.display = 'none';
             }, 5000);
         }
+
+        // ── AUTO-SAVE / RESTORE ───────────────────────────────────────────────
+        const DRAFT_KEY = 'nominationFormDraft';
+        const FIELDS = ['month','year','employeeName','hrmsId','designation','pf','department','section','duration','contribution','nominatedby'];
+        let autosaveTimer = null;
+
+        function saveDraft() {
+            const dot = document.getElementById('autosaveDot');
+            dot.classList.add('saving');
+            document.getElementById('autosaveLabel').textContent = 'Saving…';
+
+            const data = {};
+            FIELDS.forEach(id => {
+                data[id] = document.getElementById(id).value;
+            });
+            data._savedAt = new Date().toLocaleTimeString();
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+
+            setTimeout(() => {
+                dot.classList.remove('saving');
+                document.getElementById('autosaveLabel').textContent = 'Saved at ' + data._savedAt;
+            }, 500);
+        }
+
+        function restoreDraft() {
+            const raw = localStorage.getItem(DRAFT_KEY);
+            if (!raw) return;
+            try {
+                const data = JSON.parse(raw);
+                let restored = false;
+                FIELDS.forEach(id => {
+                    if (data[id] !== undefined && data[id] !== '') {
+                        document.getElementById(id).value = data[id];
+                        restored = true;
+                    }
+                });
+                if (restored) {
+                    document.getElementById('draftRestoredBadge').style.display = 'block';
+                    setTimeout(() => {
+                        document.getElementById('draftRestoredBadge').style.display = 'none';
+                    }, 5000);
+                    document.getElementById('autosaveLabel').textContent = 'Draft from ' + (data._savedAt || '—');
+                }
+            } catch(e) {}
+        }
+
+        function clearDraft() {
+            if (!confirm('Delete saved draft? All unsaved data will be lost.')) return;
+            localStorage.removeItem(DRAFT_KEY);
+            document.getElementById('nominationForm').reset();
+            // reset fires the reset listener which re-sets year; handled there
+            document.getElementById('autosaveLabel').textContent = 'Draft cleared';
+            document.getElementById('draftRestoredBadge').style.display = 'none';
+        }
+
+        // Attach input listeners for auto-save (debounced 800 ms)
+        function scheduleAutosave() {
+            clearTimeout(autosaveTimer);
+            autosaveTimer = setTimeout(saveDraft, 800);
+        }
+
+        FIELDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', scheduleAutosave);
+                el.addEventListener('change', scheduleAutosave);
+            }
+        });
+
+        // Restore on page load
+        restoreDraft();
+
+        // Clear draft after successful submit so stale data isn't re-loaded
+        const _origSubmitListener = document.getElementById('nominationForm').onsubmit;
+        document.getElementById('nominationForm').addEventListener('submit', function() {
+            // Will be cleared after confirmed success inside the async handler
+        });
+
+        // ── END AUTO-SAVE ────────────────────────────────────────────────────
 
         // Generate PDF function
         function generatePDF() {
