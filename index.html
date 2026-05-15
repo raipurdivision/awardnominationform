@@ -6,6 +6,8 @@
 
 
 
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,7 +24,7 @@
 
         body {
             font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+            background: #0a1628;
             padding: 20px;
             min-height: 100vh;
         }
@@ -395,7 +397,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label for="month">Month:</label>
-                    <input type="month" id="month" name="month" required>
+                    <input type="text" id="month" name="month" placeholder="e.g., May" required>
                 </div>
                 <div class="form-group">
                     <label for="year">Year:</label>
@@ -405,9 +407,15 @@
 
             <div class="section-title">A. Employee Details</div>
 
-            <div class="form-group full-width">
-                <label for="employeeName">Name of the Employee (in clear/block letters):</label>
-                <input type="text" id="employeeName" name="employeeName" required style="text-transform: uppercase;">
+            <div class="form-row">
+                <div class="form-group" style="flex: 1;">
+                    <label for="employeeName">NAME OF THE EMPLOYEE (IN BLOCK LETTERS):</label>
+                    <input type="text" id="employeeName" name="employeeName" required style="text-transform: uppercase;">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label for="hrmsId">HRMS ID:</label>
+                    <input type="text" id="hrmsId" name="hrmsId" required>
+                </div>
             </div>
 
             <div class="form-row">
@@ -543,6 +551,7 @@
             const empName = document.getElementById('employeeName').value;
             const desig   = document.getElementById('designation').value;
             const pfNo    = document.getElementById('pf').value;
+            const hrmsId  = document.getElementById('hrmsId').value;
             const dept    = document.getElementById('department').value;
             const sec     = document.getElementById('section').value;
             const dur     = document.getElementById('duration').value;
@@ -562,7 +571,7 @@
                 cliName1:     nominBy,
                 cliName2:     dept + ' / ' + sec,
                 date:         month + ' (' + year + ')',
-                lpName:       empName + ' | ' + desig + ' | PF: ' + pfNo,
+                lpName:       empName + ' | ' + desig + ' | PF: ' + pfNo + ' | HRMS: ' + hrmsId,
                 remarks:      contrib,
                 otherRemarks: 'Duration of Service: ' + dur
             });
@@ -648,6 +657,7 @@
             const employeeName = document.getElementById('employeeName').value;
             const designation = document.getElementById('designation').value;
             const pf = document.getElementById('pf').value;
+            const hrmsId = document.getElementById('hrmsId').value;
             const department = document.getElementById('department').value;
             const section = document.getElementById('section').value;
             const duration = document.getElementById('duration').value;
@@ -655,7 +665,7 @@
             const nominatedBy = document.getElementById('nominatedby').value;
 
             // Validate form
-            if (!employeeName || !designation || !pf || !department || !section || !duration || !contribution || !nominatedBy) {
+            if (!employeeName || !designation || !pf || !hrmsId || !department || !section || !duration || !contribution || !nominatedBy) {
                 showMessage('Please fill all fields before generating PDF.', 'error');
                 return;
             }
@@ -687,24 +697,33 @@
             }
 
             // Helper function to draw multi-line text box with label outside
-            function drawMultiLineTextBox(x, y, width, height, label, value) {
+            // Returns the actual height used so caller can advance y correctly
+            function drawMultiLineTextBox(x, y, width, minHeight, label, value) {
                 // Draw label OUTSIDE the box (above it)
                 doc.setFontSize(9);
                 doc.setFont(undefined, 'normal');
                 doc.setTextColor(80, 80, 80);
                 doc.text(label, x, y - 2);
 
+                // Calculate required height based on content
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'bold');
+                const splitText = doc.splitTextToSize(value, width - 4);
+                const lineHeight = 6; // mm per line at fontSize 10
+                const padding = 8;    // top + bottom padding
+                const contentHeight = splitText.length * lineHeight + padding;
+                const boxHeight = Math.max(minHeight, contentHeight);
+
                 // Draw rectangle with lighter border
                 doc.setDrawColor(180, 180, 180);
                 doc.setLineWidth(0.3);
-                doc.rect(x, y, width, height);
+                doc.rect(x, y, width, boxHeight);
 
                 // Draw value INSIDE the box
-                doc.setFontSize(10);
-                doc.setFont(undefined, 'bold');
                 doc.setTextColor(30, 30, 30);
-                const splitText = doc.splitTextToSize(value, width - 4);
                 doc.text(splitText, x + 2, y + 6);
+
+                return boxHeight;
             }
 
             // Draw outer border with lighter color
@@ -744,8 +763,11 @@
             doc.text('A. EMPLOYEE DETAILS', margin + 5, y + 5);
             y += 10;
 
-            // Employee Name (full width)
-            drawTextBox(margin + 5, y, contentWidth - 10, 12, 'Name of the Employee (in clear/block letters):', employeeName.toUpperCase(), true);
+            // Employee Name (half width) and HRMS ID (half width) side by side — equal lengths
+            const nameWidth = halfWidth;
+            const hrmsWidth = halfWidth;
+            drawTextBox(margin + 5, y, nameWidth, 12, 'NAME OF THE EMPLOYEE (IN BLOCK LETTERS):', employeeName.toUpperCase(), true);
+            drawTextBox(margin + 5 + nameWidth + 5, y, hrmsWidth, 12, 'HRMS ID:', hrmsId);
             y += 18;
 
             // Designation and PF Number (side by side)
@@ -769,11 +791,11 @@
             doc.text('B. BASIS OF RECOMMENDATION', margin + 5, y + 5);
             y += 10;
 
-            // Contribution (large text box)
-            drawMultiLineTextBox(margin + 5, y, contentWidth - 10, 50,
+            // Contribution (auto-height text box)
+            const contribHeight = drawMultiLineTextBox(margin + 5, y, contentWidth - 10, 20,
                 'Brief description of the employee\'s special contribution in the field of safety/work performance:',
                 contribution);
-            y += 58;
+            y += contribHeight + 8;
 
             // Nominated by box (on the right side) — signature image above name
             const nominatedByWidth = 80;
@@ -783,37 +805,41 @@
             if (signatureDataUrl) {
                 try {
                     const imgFormat = signatureDataUrl.includes('image/png') ? 'PNG' : 'JPEG';
-                    doc.setFontSize(9);
-                    doc.setFont(undefined, 'normal');
-                    doc.setTextColor(80, 80, 80);
-                    doc.text('Signature:', nominatedByX, y - 2);
                     doc.addImage(signatureDataUrl, imgFormat, nominatedByX + 2, y + 1, nominatedByWidth - 4, 16);
                 } catch(e) { /* skip if image fails */ }
                 y += 24;
             }
 
-            // Nominated by — label + value, no border
-            doc.setFontSize(9);
-            doc.setFont(undefined, 'normal');
-            doc.setTextColor(80, 80, 80);
-            doc.text('Nominated by:', nominatedByX, y);
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'bold');
-            doc.setTextColor(30, 30, 30);
-            doc.text(nominatedBy, nominatedByX + 2, y + 7);
-            y += 18;
+            // Nominated by (right-aligned) and Date (left-aligned) on the same row
+            const nomDateY = y + 5;
+            const dateLeftX = margin + 5;
 
-            // Date — label + value, no border
-            const dateWidth = (contentWidth - 10) / 2;
-            const dateX = margin + 5 + dateWidth + 5;
-            doc.setFontSize(9);
+            // Format date as DD.MM.YYYY
+            const now = new Date();
+            const dd = String(now.getDate()).padStart(2, '0');
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const yyyy = now.getFullYear();
+            const formattedDate = dd + '.' + mm + '.' + yyyy;
+
+            // Date on the left: "Date: 15.05.2026"
+            doc.setFontSize(10);
             doc.setFont(undefined, 'normal');
             doc.setTextColor(80, 80, 80);
-            doc.text('Date:', dateX, y);
-            doc.setFontSize(10);
+            doc.text('Date:', dateLeftX, nomDateY);
+            const dateLabelW = doc.getTextWidth('Date:');
             doc.setFont(undefined, 'bold');
             doc.setTextColor(30, 30, 30);
-            doc.text(new Date().toLocaleDateString(), dateX + 2, y + 7);
+            doc.text(formattedDate, dateLeftX + dateLabelW + 2, nomDateY);
+
+            // Nominated by on the right: "Nominated by: NAME"
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(80, 80, 80);
+            doc.text('Nominated by:', nominatedByX, nomDateY);
+            const nomLabelW = doc.getTextWidth('Nominated by:');
+            doc.setFont(undefined, 'bold');
+            doc.setTextColor(30, 30, 30);
+            doc.text(nominatedBy, nominatedByX + nomLabelW + 2, nomDateY);
+            y += 12;
 
             // Save PDF
             const fileName = `Nomination_${employeeName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
